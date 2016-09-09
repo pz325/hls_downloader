@@ -41,16 +41,13 @@ def download_uri(host_root, subpath, clear_local=False):
             print('{subpath} exists'.format(subpath=subpath))
             return
 
-    paths = subpath.split('/')
-    target_name = paths[-1]
-    del paths[-1]
-    if paths:
-        subfolder = '/'.join(paths)
-        if not os.path.exists(subfolder):
-            os.makedirs(subfolder)
+    target_name = os.path.basename(subpath)
+    subfolder = os.path.dirname(subpath)
+    if subfolder and not os.path.exists(subfolder):
+        os.makedirs(subfolder)
 
     download(host_root+subpath, target_name)
-    os.rename(target_name, os.path.join(subfolder, target_name))
+    os.rename(target_name, subpath)
 
 
 def download_master_playlist(host_root, master_playlist_file):
@@ -77,43 +74,34 @@ def download_stream(host_root, stream_playlist_file):
         content = f.read()
     stream_playlist = m3u8.loads(content)
 
-    subpath = stream_playlist_file.split('/')
-    del subpath[-1]
-    subpath = '/'.join(subpath)
-
+    subpath = os.path.basename(stream_playlist_file)
     for segment in stream_playlist.segments:
         download_uri(host_root, '/'.join([subpath, segment.uri]))
         if segment.byterange:
             break
 
 
-
-
-
-def downloadStream4():
-    pass
-
-
 def parse_uri(uri):
     '''
-    parse URI into host_root, filename, and stream_id
+    parse URI into host_root, filename
     e.g. http://example.com/path/to/stream_id/index.m3u8
     host_root = http://example.com/path/to/stream_id/
     filename = index.m3u8
-    stream_id = stream_id
     @param uri
-    @return host_root, filename, stream_id
+    @return host_root, filename
     '''
     url = urlparse(uri)
     host_root = url.scheme + '://' + url.netloc + os.path.dirname(url.path) + '/'
     filename = os.path.basename(url.path)
-    local_root = os.path.split(os.path.dirname(url.path))[1]
-    if not local_root:
-        local_root = '.'
-    return host_root, filename, local_root
+    return host_root, filename
 
 
-def download_hls_stream(master_playlist_uri):
+def download_hls_stream(master_playlist_uri, id='.'):
+    '''
+    Download hls stream to local folder indiciated by id
+    @param master_playlist_uri
+    @param id Defaut CWD
+    '''
     print('master_playlist_uri: {master_playlist_uri}'.format(master_playlist_uri=master_playlist_uri))
     host_root, master_playlist_file, local_root = parse_uri(master_playlist_uri)
 
@@ -121,6 +109,8 @@ def download_hls_stream(master_playlist_uri):
     old_cwd = chdir(local_root)
 
     master_playlist = download_master_playlist(host_root, master_playlist_file)
+
+    # download resource from stream playlist
     for playlist in master_playlist.playlists:
         download_stream(host_root, playlist.uri)
 
@@ -136,19 +126,17 @@ def download_hls_stream(master_playlist_uri):
 
 
 def main():
-    # download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8')
-    # download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8')
-    download_hls_stream('http://tungsten.aaplimg.com/VOD/bipbop_adv_example_v2/master.m3u8')
-    # parser = argparse.ArgumentParser(description='Download Apple reference HLS streams')
-    # parser.add_argument('--index', type=int, choices=range(0, 3), help='Index of streams to download')
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser(description='Download HLS streams -- default to download Apple reference HLS streams')
+    parser.add_argument('--stream', help='master playlist URI, m3u8 resource')
+    parser.add_argument('--id', help='stream id. Used a subfolder name for the downloads')
+    args = parser.parse_args()
 
-    # tasks = [download_stream1, download_stream2, download_stream3]
-    # if args.index is not None:
-    #     tasks[args.index]()
-    # else:
-    #     for task in tasks:
-    #         task()
+    if args.stream:
+        download_hls_stream(args.stream, args.id)
+    else:
+        download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 'bipbop_4x3')
+        download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8', 'bipbop_16x9')
+        download_hls_stream('http://tungsten.aaplimg.com/VOD/bipbop_adv_example_v2/master.m3u8', 'bipbop_adv_example_v2')
 
 
 if __name__ == '__main__':
