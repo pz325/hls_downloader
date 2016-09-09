@@ -65,8 +65,10 @@ def download_master_playlist(host_root, master_playlist_file):
 
 
 def download_stream(host_root, stream_playlist_file):
-    print('host_root: {host_root}'.format(host_root=host_root))
-    print('stream_playlist_file: {stream_playlist_file}'.format(stream_playlist_file=stream_playlist_file))
+    '''
+    @param host_root
+    @param stream_playlist_file
+    '''
     download_uri(host_root, stream_playlist_file)
     stream_playlist_uri = host_root + stream_playlist_file
     print('loading {stream_playlist_uri}'.format(stream_playlist_uri=stream_playlist_uri))
@@ -74,7 +76,8 @@ def download_stream(host_root, stream_playlist_file):
         content = f.read()
     stream_playlist = m3u8.loads(content)
 
-    subpath = os.path.basename(stream_playlist_file)
+    subpath = os.path.dirname(stream_playlist_file)
+    print('subpath:', subpath)
     for segment in stream_playlist.segments:
         download_uri(host_root, '/'.join([subpath, segment.uri]))
         if segment.byterange:
@@ -103,7 +106,8 @@ def download_hls_stream(master_playlist_uri, id='.'):
     @param id Defaut CWD
     '''
     print('master_playlist_uri: {master_playlist_uri}'.format(master_playlist_uri=master_playlist_uri))
-    host_root, master_playlist_file, local_root = parse_uri(master_playlist_uri)
+    host_root, master_playlist_file = parse_uri(master_playlist_uri)
+    local_root = id
 
     print('downloading {uri} to {local}'.format(uri=host_root+master_playlist_file, local=local_root))
     old_cwd = chdir(local_root)
