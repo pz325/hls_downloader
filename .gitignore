@@ -1,4 +1,5 @@
-.ts
+*.ts
+*.pyc
 bipbop_4x3
 bipbop_16x9
 bipbop_adv_example_v2
