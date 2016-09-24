@@ -38,7 +38,7 @@ def download_stream(uri, subpath=None):
         if segment.uri.startswith('#'):
             continue
         if util.is_full_uri(segment.uri):
-            segment_host, segment_subpath, segment_filename = parse_uri(segment.uri)
+            segment_host, segment_subpath, segment_filename = util.parse_uri(segment.uri)
             downloader.download_uri_async(segment.uri, os.path.join(segment_subpath, segment_filename))
         else:
             segment_uri = stream_playlist_host + '/' + stream_playlist_subpath + '/' + segment.uri
