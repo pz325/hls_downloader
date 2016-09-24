@@ -120,8 +120,16 @@ def get_client():
     return CLIENT
 
 
+def start(num_workers):
+    start_workers(num_workers)
+
+
+def stop():
+    stop_all_workers()
+
+
 def main():
-    start_workers(4)
+    start(4)
     client = get_client()
 
     uri = 'http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8'
@@ -135,7 +143,7 @@ def main():
     }
     client.send_json(work_message)
 
-    stop_all_workers()
+    stop()
 
 
 if __name__ == '__main__':

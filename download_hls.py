@@ -6,9 +6,6 @@ import downloader
 import util
 
 
-global client
-
-
 def download_master_playlist(master_playlist_uri):
     '''
     @param master_playlist_uri Full URI of master playlist
@@ -51,7 +48,6 @@ def download_stream(uri, subpath=None):
             break
 
 
-
 def download_hls_stream(master_playlist_uri, id='.', num_workers=10):
     '''
     Download hls stream to local folder indiciated by id
@@ -64,9 +60,7 @@ def download_hls_stream(master_playlist_uri, id='.', num_workers=10):
     print('downloading {uri} to {local}'.format(uri=master_playlist_uri, local=local_root))
     old_cwd = util.chdir(local_root)
 
-    downloader.start_workers(num_workers)
-    global client
-    client = downloader.get_client()
+    downloader.start(num_workers)
 
     master_playlist = download_master_playlist(master_playlist_uri)
 
@@ -91,7 +85,7 @@ def download_hls_stream(master_playlist_uri, id='.', num_workers=10):
                 playlist_uri = host_root + '/' + subpath + '/' + uri
                 download_stream(playlist_uri, os.path.dirname(uri))
 
-    downloader.stop_all_workers()
+    downloader.stop()
     os.chdir(old_cwd)
 
 
