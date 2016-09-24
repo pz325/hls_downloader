@@ -3,6 +3,7 @@ import os
 import argparse
 import downloader
 import util
+import time
 
 
 def download_master_playlist(master_playlist_uri):
@@ -47,11 +48,14 @@ def download_stream(uri, subpath=None):
             break
 
 
-def download_hls_stream(master_playlist_uri, id='.', num_workers=10):
+def download_hls_stream(master_playlist_uri, id='.', num_workers=10, refreash_interval=0, num_refreshes=0):
     '''
     Download hls stream to local folder indiciated by id
     @param master_playlist_uri
     @param id Defaut CWD
+    @param num_workers Number of downloader workers
+    @param refresh_interval unit: second, Default 0
+    @param num_refreshes Default 0
     '''
     print('master_playlist_uri: {master_playlist_uri}'.format(master_playlist_uri=master_playlist_uri))
     local_root = id
@@ -61,28 +65,33 @@ def download_hls_stream(master_playlist_uri, id='.', num_workers=10):
 
     downloader.start(num_workers)
 
-    master_playlist = download_master_playlist(master_playlist_uri)
+    for r in range(0, num_refreshes+1):
+        master_playlist = download_master_playlist(master_playlist_uri)
 
-    host_root, subpath, master_playlist_file = util.parse_uri(master_playlist_uri)
-    # download resource from stream playlist
-    for playlist in master_playlist.playlists:
-        if util.is_full_uri(playlist.uri):
-            download_stream(playlist.uri)
-            pass
-        else:
-            playlist_uri = host_root + '/' + subpath + '/' + playlist.uri
-            download_stream(playlist_uri, os.path.dirname(playlist.uri))
+        host_root, subpath, master_playlist_file = util.parse_uri(master_playlist_uri)
+        # download resource from stream playlist
+        for playlist in master_playlist.playlists:
+            if util.is_full_uri(playlist.uri):
+                download_stream(playlist.uri)
+                pass
+            else:
+                playlist_uri = host_root + '/' + subpath + '/' + playlist.uri
+                download_stream(playlist_uri, os.path.dirname(playlist.uri))
 
-    # download resource from media
-    for m in master_playlist.media:
-        if not m.uri:
-            continue
-        if util.is_full_uri(m.uri):
-            download_stream(m.uri)
-            pass
-        else:
-            media_uri = host_root + '/' + subpath + '/' + m.uri
-            download_stream(media_uri, os.path.dirname(m.uri))
+        # download resource from media
+        for m in master_playlist.media:
+            if not m.uri:
+                continue
+            if util.is_full_uri(m.uri):
+                download_stream(m.uri)
+                pass
+            else:
+                media_uri = host_root + '/' + subpath + '/' + m.uri
+                download_stream(media_uri, os.path.dirname(m.uri))
+
+        if refreash_interval:
+            print('Refreshing the master playlist in {interval} seconds'.format(interval=refreash_interval))
+        time.sleep(refreash_interval)
 
     downloader.stop()
     os.chdir(old_cwd)
@@ -93,11 +102,13 @@ def main():
     parser.add_argument('--stream', help='master playlist URI, m3u8 resource')
     parser.add_argument('--id', help='stream id. Used a subfolder name for the downloads')
     parser.add_argument('--workers', default=10, help='Number of download workers')
+    parser.add_argument('--refresh_interval', type=int, help='Interval (second) of refreshing the master playlist, for downloading LIVE resources')
+    parser.add_argument('--num_refreshes', type=int, help='Number of refreshing the master playlist, for downloading LIVE resources')
     args = parser.parse_args()
 
     if args.stream:
-        download_hls_stream(args.stream, args.id, args.workers)
-    else:
+        download_hls_stream(args.stream, args.id, args.workers, args.refresh_interval, args.num_refreshes)
+    else:  # default tasks
         # download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 'bipbop_4x3')
         download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8', 'bipbop_16x9')
         # download_hls_stream('http://tungsten.aaplimg.com/VOD/bipbop_adv_example_v2/master.m3u8', 'bipbop_adv_example_v2')
