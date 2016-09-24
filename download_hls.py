@@ -1,7 +1,6 @@
 import m3u8
 import os
 import argparse
-import re
 import downloader
 import util
 
@@ -69,21 +68,21 @@ def download_hls_stream(master_playlist_uri, id='.', num_workers=10):
     for playlist in master_playlist.playlists:
         if util.is_full_uri(playlist.uri):
             download_stream(playlist.uri)
+            pass
         else:
             playlist_uri = host_root + '/' + subpath + '/' + playlist.uri
             download_stream(playlist_uri, os.path.dirname(playlist.uri))
 
-    # download resource from URI
-    pattern = 'URI="(.*)"'
-    for l in open(master_playlist_file):
-        m = re.search(pattern, l)
-        if m:
-            uri = m.group(1)
-            if util.is_full_uri(uri):
-                download_stream(uri)
-            else:
-                playlist_uri = host_root + '/' + subpath + '/' + uri
-                download_stream(playlist_uri, os.path.dirname(uri))
+    # download resource from media
+    for m in master_playlist.media:
+        if not m.uri:
+            continue
+        if util.is_full_uri(m.uri):
+            download_stream(m.uri)
+            pass
+        else:
+            media_uri = host_root + '/' + subpath + '/' + m.uri
+            download_stream(media_uri, os.path.dirname(m.uri))
 
     downloader.stop()
     os.chdir(old_cwd)
@@ -99,8 +98,8 @@ def main():
     if args.stream:
         download_hls_stream(args.stream, args.id, args.workers)
     else:
-        download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 'bipbop_4x3')
-        # download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8', 'bipbop_16x9')
+        # download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 'bipbop_4x3')
+        download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8', 'bipbop_16x9')
         # download_hls_stream('http://tungsten.aaplimg.com/VOD/bipbop_adv_example_v2/master.m3u8', 'bipbop_adv_example_v2')
 
 
