@@ -48,7 +48,7 @@ def download_stream(uri, subpath=None):
             break
 
 
-def download_hls_stream(master_playlist_uri, id='.', num_workers=10, refreash_interval=0, num_refreshes=0):
+def download_hls_stream(master_playlist_uri, id='.', num_workers=10, refreash_interval=0, num_refreshes=1):
     '''
     Download hls stream to local folder indiciated by id
     @param master_playlist_uri
@@ -101,9 +101,9 @@ def main():
     parser = argparse.ArgumentParser(description='Download HLS streams -- default to download Apple reference HLS streams')
     parser.add_argument('--stream', help='master playlist URI, m3u8 resource')
     parser.add_argument('--id', help='stream id. Used a subfolder name for the downloads')
-    parser.add_argument('--workers', default=10, help='Number of download workers')
-    parser.add_argument('--refresh_interval', type=int, help='Interval (second) of refreshing the master playlist, for downloading LIVE resources')
-    parser.add_argument('--num_refreshes', type=int, help='Number of refreshing the master playlist, for downloading LIVE resources')
+    parser.add_argument('--workers', default=10, type=int, help='Number of download workers')
+    parser.add_argument('--refresh_interval', default=0, type=int, help='Interval (second) of refreshing the master playlist, for downloading LIVE resources')
+    parser.add_argument('--num_refreshes', default=1, type=int, help='Number of refreshing the master playlist, for downloading LIVE resources')
     args = parser.parse_args()
 
     if args.stream:

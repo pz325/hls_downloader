@@ -39,7 +39,10 @@ def download_uri(uri, local, clear_local=False):
         os.makedirs(subfolder)
 
     download(uri, target_name)
-    os.rename(target_name, local)
+    try:
+        os.rename(target_name, local)
+    except WindowsError:
+        print('Error: exception while moving {filename}'.format(filename=target_name))
 
 
 def download_uri_async(uri, local, clear_local=False):
