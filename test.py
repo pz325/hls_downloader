@@ -6,12 +6,10 @@ from multiprocessing import Lock
 from multiprocessing import Manager
 
 
-GLOBAL_TASKS_LOCK = Lock()
 GLOBAL_PRINT_LOCK = Lock()
 TASK_PORT = 5000
 RESULT_PORT = 5001
 WORKER_ACK_PORT = 9000
-SINK_ACK_PORT = 9001
 CONTEXT = zmq.Context()
 
 
@@ -39,16 +37,6 @@ def blocking_print(message):
     GLOBAL_PRINT_LOCK.acquire()
     print(message)
     GLOBAL_PRINT_LOCK.release()
-
-
-def _update_task_list(task):
-    '''
-    @param task Task object
-    id is uri
-    '''
-    blocking_print('Update task {task} as {status}'.format(task=task.id, status=task.status))
-    TASKS[task.id] = task
-    _print_tasks()
 
 
 def _worker(action):
@@ -105,7 +93,7 @@ def _sink(tasks):
 def simple_action(task):
     blocking_print('procesing task: {id}'.format(id=task.id))
     import random
-    time.sleep(random.randint(1, 2))
+    time.sleep(random.randint(1, 10))
 
 
 def start(num_workers=4):
@@ -148,11 +136,16 @@ def stop(processes):
 
 def main():
     processes, task_out, tasks = start()
-    for i in range(20):
-        task = Task(i, {})
-        tasks[task.id] = task
-        blocking_print('send task: {task}'.format(task=task.id))
-        task_out.send_json(task.__dict__)
+    for i in range(200):
+        import random
+        task_id = random.randint(1, 30)
+        task = Task(task_id, {})
+        if task.id in tasks:
+            blocking_print('task: {task_id} is processed'.format(task_id=task.id))
+        else:
+            tasks[task.id] = task
+            blocking_print('send task: {task}'.format(task=task.id))
+            task_out.send_json(task.__dict__)
         time.sleep(0.5)
 
     all_task_done = False
