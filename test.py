@@ -69,8 +69,8 @@ def _worker(action):
         task = Task(task_msg['id'], task_msg['command'])
         blocking_print('worker [{id}] is working on {task}'.format(id=worker_id, task=task.id))
 
-        action(task)
-        task.set_done()
+        if action(task):
+            task.set_done()
 
         result_out.send_json(task.__dict__)
 
@@ -163,11 +163,14 @@ def print_all_tasks():
 
 def main():
     def simple_action(task):
+        '''
+        @param task Task instance
+        @return True indicating task done, False otherwise
+        '''
         blocking_print('procesing task: {id}'.format(id=task.id))
         import random
         time.sleep(random.randint(1, 10))
-        # TODO, action returns True or False indicating task done or not
-        # sinker then collect result accordingly
+        return True
 
     # start boss (including worker and sinker processes)
     start(num_workers=4, task_processor=simple_action)
