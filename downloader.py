@@ -1,13 +1,10 @@
 import requests
 import os
-import zmq
-from multiprocessing import Process
-
-SERVER_PORTS = [5550]
-CLIENT = None
+import boss
+import time
 
 
-def download(uri, filename):
+def _download(uri, filename):
     '''
     download from uri and save as filename (relative to CWD)
     @param uri
@@ -18,134 +15,91 @@ def download(uri, filename):
         f.write(resp.content)
 
 
-def download_uri(uri, local, clear_local=False):
+def download(uri, local, clear_local=False):
     '''
     Download resource from uri, save to local, i.e. path/to/target.file (relative to CWD)
 
     @param uri Full URI of the target
     @param local path/to/target.file
     '''
-    print('downloading {uri} to {local}'.format(uri=uri, local=local))
+    boss.blocking_print('downloading {uri} to {local}'.format(uri=uri, local=local))
     if os.path.exists(local):
         if clear_local:
             os.remove(local)
         else:
-            print('{local} exists'.format(local=local))
-            return
+            boss.blocking_print('{local} exists'.format(local=local))
+            return True
 
     target_name = os.path.basename(local)
     subfolder = os.path.dirname(local)
     if subfolder and not os.path.exists(subfolder):
         os.makedirs(subfolder)
 
-    download(uri, target_name)
+    _download(uri, target_name)
     try:
         os.rename(target_name, local)
     except WindowsError:
-        print('Error: exception while moving {filename}'.format(filename=target_name))
+        boss.blocking_print('Error: exception while moving {filename}'.format(filename=target_name))
+        return False
+    return True
 
 
-def download_uri_async(uri, local, clear_local=False):
+def download_async(uri, local, clear_local=False):
     subfolder = os.path.dirname(local)
     if subfolder and not os.path.exists(subfolder):
         os.makedirs(subfolder)
-    work_message = {
-        'cmd': 'download',
+    command = {
         'uri': uri,
         'local': local,
         'clear_local': False
     }
-    global CLIENT
-    if not CLIENT:
-        CLIENT = get_client()
-    CLIENT.send_json(work_message)
+    task = boss.Task(task_id=uri, command=command)
+    boss.dedicate(task)
 
 
-def worker(port='5556'):
+def _download_task(task):
     '''
-    message: {'cmd': 'stop'}
-    message: {'cmd': 'download', 'uri': 'uri', 'local': 'local', 'clear_local': False}
+    @param task Task instance
+    @return True indicating download succeeds, False otherwise
     '''
-    print('[worker {port}] starts'.format(port=port))
-    context = zmq.Context()
-    socket = context.socket(zmq.PULL)
-    socket.bind('tcp://*:{port}'.format(port=port))
-    while True:
-        # Wait for next request from client
-        message = socket.recv_json()
-        print('[worker {port}] message: {message}'.format(port=port, message=message))
-        if 'cmd' not in message:
-            print('[worker {port}] Error: unsupported message'.format(port=port))
-            break
-
-        if message['cmd'] == 'stop':
-            break
-        elif message['cmd'] == 'download':
-            pass
-            download_uri(message['uri'], message['local'], message['clear_local'])
-        else:
-            print('[worker {port}] Error: unsupported cmd'.format(port=port))
-
-    print('[worker {port}] exits'.format(port=port))
+    return download(task.command['uri'], task.command['local'], task.command['clear_local'])
 
 
-def stop_all_workers():
-    context = zmq.Context()
-    socket = context.socket(zmq.PUSH)
-    for port in SERVER_PORTS:
-        socket.connect('tcp://localhost:{port}'.format(port=port))
-    for port in SERVER_PORTS:
-        socket.send_json({'cmd': 'stop'})
-
-
-def start_workers(num_workers=4):
-    global SERVER_PORTS
-    SERVER_PORTS = []
-    for n in range(num_workers):
-        port = 5550 + n
-        SERVER_PORTS.append(port)
-        Process(target=worker, args=(port,)).start()
-    global CLIENT
-    CLIENT = None
-
-
-def get_client():
-    global CLIENT
-    if CLIENT:
-        return CLIENT
-
-    context = zmq.Context()
-    socket = context.socket(zmq.PUSH)
-    socket.hwm = 1000000
-    for port in SERVER_PORTS:
-        socket.connect('tcp://localhost:{port}'.format(port=port))
-    CLIENT = socket
-    return CLIENT
-
-
-def start(num_workers):
-    start_workers(num_workers)
+def start(num_workers=2):
+    boss.blocking_print('Start downloader with {i} workers'.format(i=num_workers))
+    boss.start(num_workers=num_workers, task_processor=_download_task)
 
 
 def stop():
-    stop_all_workers()
+    boss.blocking_print('Stop downloader')
+    boss.stop()
+
+
+def join():
+    '''
+    wait until all download done
+    '''
+    while not boss.have_all__TASKS_done():
+        boss.blocking_print('Waiting for all downloads done')
+        time.sleep(1)
+    boss.blocking_print('All downloads done')
 
 
 def main():
-    start(4)
-    client = get_client()
-
+    # blocking download
     uri = 'http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8'
     local = 'bipbop_4x3/bipbop_4x3_variant.m3u8'
 
-    work_message = {
-        'cmd': 'download',
-        'uri': uri,
-        'local': local,
-        'clear_local': False
-    }
-    client.send_json(work_message)
+    download(uri=uri, local=local, clear_local=True)
 
+    # async batch download
+    start(num_workers=4)
+
+    for i in range(0, 20):
+        uri = 'http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear1/fileSequence{i}.ts'.format(i=i)
+        local = 'bipbop_4x3/gear1/fileSequence{i}.ts'.format(i=i)
+        download_async(uri=uri, local=local, clear_local=True)
+    join()
     stop()
 
 

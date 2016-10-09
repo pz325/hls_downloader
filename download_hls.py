@@ -11,7 +11,7 @@ def download_master_playlist(master_playlist_uri):
     @param master_playlist_uri Full URI of master playlist
     '''
     host, subpath, filename = util.parse_uri(master_playlist_uri)
-    downloader.download_uri(master_playlist_uri, filename, clear_local=True)  # always refresh playlist - so the script can be used for parsing live streams
+    downloader.download(master_playlist_uri, filename, clear_local=True)  # always refresh playlist - so the script can be used for parsing live streams
     print('loading {master_playlist_uri}'.format(master_playlist_uri=master_playlist_uri))
     with open(filename, 'r') as f:
         content = f.read()
@@ -28,7 +28,7 @@ def download_stream(uri, subpath=None):
     local_stream_playlist_filename = os.path.join(stream_playlist_subpath, stream_playlist_filename)
     if subpath:
         local_stream_playlist_filename = os.path.join(subpath, stream_playlist_filename)
-    downloader.download_uri(uri, local_stream_playlist_filename, clear_local=True)   # always refresh playlist - so the script can be used for parsing live streams
+    downloader.download(uri, local_stream_playlist_filename, clear_local=True)   # always refresh playlist - so the script can be used for parsing live streams
 
     print('loading {local}'.format(local=local_stream_playlist_filename))
     with open(local_stream_playlist_filename, 'r') as f:
@@ -40,10 +40,10 @@ def download_stream(uri, subpath=None):
             continue
         if util.is_full_uri(segment.uri):
             segment_host, segment_subpath, segment_filename = util.parse_uri(segment.uri)
-            downloader.download_uri_async(segment.uri, os.path.join(segment_subpath, segment_filename))
+            downloader.download_async(segment.uri, os.path.join(segment_subpath, segment_filename))
         else:
             segment_uri = stream_playlist_host + '/' + stream_playlist_subpath + '/' + segment.uri
-            downloader.download_uri_async(segment_uri, os.path.join(subpath, segment.uri))
+            downloader.download_async(segment_uri, os.path.join(subpath, segment.uri))
         if segment.byterange:
             break
 
@@ -65,7 +65,7 @@ def download_hls_stream(master_playlist_uri, id='.', num_workers=10, refreash_in
 
     downloader.start(num_workers)
 
-    for r in range(0, num_refreshes+1):
+    for r in range(0, num_refreshes + 1):
         master_playlist = download_master_playlist(master_playlist_uri)
 
         host_root, subpath, master_playlist_file = util.parse_uri(master_playlist_uri)
@@ -93,6 +93,7 @@ def download_hls_stream(master_playlist_uri, id='.', num_workers=10, refreash_in
             print('Refreshing the master playlist in {interval} seconds'.format(interval=refreash_interval))
         time.sleep(refreash_interval)
 
+    downloader.join()
     downloader.stop()
     os.chdir(old_cwd)
 
@@ -109,8 +110,8 @@ def main():
     if args.stream:
         download_hls_stream(args.stream, args.id, args.workers, args.refresh_interval, args.num_refreshes)
     else:  # default tasks
-        # download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 'bipbop_4x3')
-        download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8', 'bipbop_16x9')
+        download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 'bipbop_4x3')
+        # download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8', 'bipbop_16x9')
         # download_hls_stream('http://tungsten.aaplimg.com/VOD/bipbop_adv_example_v2/master.m3u8', 'bipbop_adv_example_v2')
 
 
