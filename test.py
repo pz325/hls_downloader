@@ -5,12 +5,16 @@ from multiprocessing import Process
 from multiprocessing import Lock
 from multiprocessing import Manager
 
+# TODO: handle failed tasks
 
-GLOBAL_PRINT_LOCK = Lock()
-TASK_PORT = 5000
-RESULT_PORT = 5001
-WORKER_ACK_PORT = 9000
-CONTEXT = zmq.Context()
+_GLOBAL_PRINT_LOCK = Lock()
+_TASK_PORT = 5000
+_RESULT_PORT = 5001
+_WORKER_ACK_PORT = 9000
+_CONTEXT = zmq.Context()
+_PROCESSES = []  # All workers and sinker process
+_TASK_OUT = None  # PUSH socket for dispatching _TASKS to workers
+_TASKS = None  # All [download] _TASKS. Instance of multiprocessing.Manager.dict()
 
 
 class Task(object):
@@ -34,24 +38,24 @@ class Task(object):
 
 
 def blocking_print(message):
-    GLOBAL_PRINT_LOCK.acquire()
+    _GLOBAL_PRINT_LOCK.acquire()
     print(message)
-    GLOBAL_PRINT_LOCK.release()
+    _GLOBAL_PRINT_LOCK.release()
 
 
 def _worker(action):
     worker_id = uuid.uuid4()
     blocking_print('create worker [{id}]'.format(id=worker_id))
 
-    task_in = CONTEXT.socket(zmq.PULL)
-    task_in.connect('tcp://localhost:{port}'.format(port=TASK_PORT))
+    task_in = _CONTEXT.socket(zmq.PULL)
+    task_in.connect('tcp://localhost:{port}'.format(port=_TASK_PORT))
 
-    result_out = CONTEXT.socket(zmq.REQ)
-    result_out.connect('tcp://localhost:{port}'.format(port=RESULT_PORT))
+    result_out = _CONTEXT.socket(zmq.REQ)
+    result_out.connect('tcp://localhost:{port}'.format(port=_RESULT_PORT))
 
     # sync worker to client
-    worker_ack_out = CONTEXT.socket(zmq.REQ)
-    worker_ack_out.connect('tcp://localhost:{port}'.format(port=WORKER_ACK_PORT))
+    worker_ack_out = _CONTEXT.socket(zmq.REQ)
+    worker_ack_out.connect('tcp://localhost:{port}'.format(port=_WORKER_ACK_PORT))
     worker_ack_out.send(b'')
     blocking_print('waiting to start worker [{id}]'.format(id=worker_id))
     worker_ack_out.recv()  # blocking wait client to response, then start working process
@@ -74,97 +78,121 @@ def _worker(action):
         result_out.recv()
 
 
-def _sink(tasks):
+def _sink(_TASKS):
     sink_id = uuid.uuid4()
     blocking_print('create sink [{id}]'.format(id=sink_id))
 
-    result_in = CONTEXT.socket(zmq.REP)
-    result_in.bind('tcp://*:{port}'.format(port=RESULT_PORT))
+    result_in = _CONTEXT.socket(zmq.REP)
+    result_in.bind('tcp://*:{port}'.format(port=_RESULT_PORT))
 
     while True:
         task_msg = result_in.recv_json()
         task = Task(task_msg['id'], task_msg['command'], task_msg['status'])
         blocking_print('sink [{id}] received result of task {task_id}'.format(id=sink_id, task_id=task.id))
-        tasks[task.id] = task
-        print(tasks)
+        _TASKS[task.id] = task
+        # print(_TASKS)
         result_in.send(b'')
 
 
-def simple_action(task):
-    blocking_print('procesing task: {id}'.format(id=task.id))
-    import random
-    time.sleep(random.randint(1, 10))
-
-
-def start(num_workers=4):
+def start(task_processor, num_workers=4):
+    global _PROCESSES
+    global _TASKS
     manager = Manager()
-    tasks = manager.dict()
-    processes = []
+    _TASKS = manager.dict()
 
     # create sink
-    p = Process(target=_sink, args=(tasks, ))
-    processes.append(p)
+    p = Process(target=_sink, args=(_TASKS, ))
+    _PROCESSES.append(p)
     p.start()
 
     # create workers
     for i in range(num_workers):
-        p = Process(target=_worker, args=(simple_action,))
-        processes.append(p)
+        p = Process(target=_worker, args=(task_processor,))
+        _PROCESSES.append(p)
         p.start()
 
     # synchronise active workers
-    ack_in = CONTEXT.socket(zmq.REP)
-    ack_in.bind('tcp://*:{port}'.format(port=WORKER_ACK_PORT))
+    ack_in = _CONTEXT.socket(zmq.REP)
+    ack_in.bind('tcp://*:{port}'.format(port=_WORKER_ACK_PORT))
     num_active_workers = 0
     while num_active_workers < num_workers:
         ack_in.recv()
         ack_in.send(b'')
         num_active_workers += 1
 
-    # create task_out socket
-    task_out = CONTEXT.socket(zmq.PUSH)
-    task_out.bind('tcp://*:{port}'.format(port=TASK_PORT))
+    # create _TASK_OUT socket
+    global _TASK_OUT
+    _TASK_OUT = _CONTEXT.socket(zmq.PUSH)
+    _TASK_OUT.bind('tcp://*:{port}'.format(port=_TASK_PORT))
 
-    return processes, task_out, tasks
 
-
-def stop(processes):
-    for p in processes:
+def stop():
+    for p in _PROCESSES:
         print('stop process [{pid}]'.format(pid=p.pid))
         p.terminate()
 
 
+def dedicate(task):
+    '''
+    @param task Task object
+    '''
+    if not _TASK_OUT:
+        blocking_print('Error _TASK_OUT is None. start() the downloader')
+        return
+
+    if task.id in _TASKS:
+            blocking_print('task: {task_id} is processed'.format(task_id=task.id))
+    else:
+        _TASKS[task.id] = task
+        blocking_print('send task: {task}'.format(task=task.id))
+        _TASK_OUT.send_json(task.__dict__)
+
+
+def have_all__TASKS_done():
+    all__TASKS_done = True
+    for k, v, in _TASKS.items():
+        if not v.is_done():
+            all__TASKS_done = False
+            break
+    return all__TASKS_done
+
+
+def print_all_tasks():
+    print(_TASKS)
+
+
 def main():
-    processes, task_out, tasks = start()
-    for i in range(200):
+    def simple_action(task):
+        blocking_print('procesing task: {id}'.format(id=task.id))
+        import random
+        time.sleep(random.randint(1, 10))
+        # TODO, action returns True or False indicating task done or not
+        # sinker then collect result accordingly
+
+    # start boss (including worker and sinker processes)
+    start(num_workers=4, task_processor=simple_action)
+
+    # dispatch dummy tasks
+    for i in range(50):
         import random
         task_id = random.randint(1, 30)
         task = Task(task_id, {})
-        if task.id in tasks:
-            blocking_print('task: {task_id} is processed'.format(task_id=task.id))
-        else:
-            tasks[task.id] = task
-            blocking_print('send task: {task}'.format(task=task.id))
-            task_out.send_json(task.__dict__)
+        dedicate(task)
         time.sleep(0.5)
 
-    all_task_done = False
+    # check all tasks done before stop boss
     total_check = 0
-    while not all_task_done:
-        all_task_done = True
-        for k, v in tasks.items():
-            if not v.is_done():
-                all_task_done = False
-                break
-        blocking_print('Waiting for all tasks done')
-        print(tasks)
+    while not have_all__TASKS_done():
+        blocking_print('Waiting for all _TASKS done')
         time.sleep(1)
         total_check += 1
         if total_check > 50:
-            all_task_done = True
+            break
 
-    stop(processes)
-    print(tasks)
+    # stop boss (including worker and sinker processes)
+    stop()
+    print_all_tasks()
+
 
 if __name__ == '__main__':
     main()
