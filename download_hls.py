@@ -36,6 +36,7 @@ def download_stream(uri, subpath=None):
     stream_playlist = m3u8.loads(content)
     print('{num_segments} segments to download in {stream_playlist}'.format(num_segments=len(stream_playlist.segments), stream_playlist=uri))
     for segment in stream_playlist.segments:
+        print('to download {url}'.format(url=segment.uri))
         if segment.uri.startswith('#'):
             continue
         if util.is_full_uri(segment.uri):
@@ -55,7 +56,7 @@ def download_hls_stream(master_playlist_uri, id='.', num_workers=10, refreash_in
     @param id Defaut CWD
     @param num_workers Number of downloader workers
     @param refresh_interval unit: second, Default 0
-    @param num_refreshes Default 0
+    @param num_refreshes Default 1
     '''
     print('master_playlist_uri: {master_playlist_uri}'.format(master_playlist_uri=master_playlist_uri))
     local_root = id
@@ -65,32 +66,36 @@ def download_hls_stream(master_playlist_uri, id='.', num_workers=10, refreash_in
 
     downloader.start(num_workers)
 
-    for r in range(0, num_refreshes + 1):
+    for r in range(0, num_refreshes):
         master_playlist = download_master_playlist(master_playlist_uri)
 
-        host_root, subpath, master_playlist_file = util.parse_uri(master_playlist_uri)
-        # download resource from stream playlist
-        for playlist in master_playlist.playlists:
-            if util.is_full_uri(playlist.uri):
-                download_stream(playlist.uri)
-                pass
-            else:
-                playlist_uri = host_root + '/' + subpath + '/' + playlist.uri
-                download_stream(playlist_uri, os.path.dirname(playlist.uri))
+        if master_playlist.is_variant:
+            host_root, subpath, master_playlist_file = util.parse_uri(master_playlist_uri)
+            # download resource from stream playlist
+            for playlist in master_playlist.playlists:
+                if util.is_full_uri(playlist.uri):
+                    download_stream(playlist.uri)
+                    pass
+                else:
+                    playlist_uri = host_root + '/' + subpath + '/' + playlist.uri
+                    download_stream(playlist_uri, os.path.dirname(playlist.uri))
 
-        # download resource from media
-        for m in master_playlist.media:
-            if not m.uri:
-                continue
-            if util.is_full_uri(m.uri):
-                download_stream(m.uri)
-                pass
-            else:
-                media_uri = host_root + '/' + subpath + '/' + m.uri
-                download_stream(media_uri, os.path.dirname(m.uri))
+            # download resource from media
+            for m in master_playlist.media:
+                if not m.uri:
+                    continue
+                if util.is_full_uri(m.uri):
+                    download_stream(m.uri)
+                    pass
+                else:
+                    media_uri = host_root + '/' + subpath + '/' + m.uri
+                    download_stream(media_uri, os.path.dirname(m.uri))
+        else:
+            download_stream(master_playlist_uri)
 
         if refreash_interval:
             print('Refreshing the master playlist in {interval} seconds'.format(interval=refreash_interval))
+
         time.sleep(refreash_interval)
 
     downloader.join()
@@ -113,6 +118,7 @@ def main():
         download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 'bipbop_4x3')
         # download_hls_stream('http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8', 'bipbop_16x9')
         # download_hls_stream('http://tungsten.aaplimg.com/VOD/bipbop_adv_example_v2/master.m3u8', 'bipbop_adv_example_v2')
+        # download_hls_stream('http://cwm-sp-lab3.hq.k.grp/live/hls/clear/bbc1clear/index.m3u8', 'bbc1')
 
 
 if __name__ == '__main__':

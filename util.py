@@ -34,3 +34,24 @@ def parse_uri(uri):
     filename = os.path.basename(url.path)
 
     return host_root, subpath, filename
+
+
+def check(path):
+    count_01, count_02, count_03 = 0, 0, 0
+    for root, dirs, files in os.walk(path):
+        for f in files:
+            if '-01-' in f:
+                count_01 += 1
+            if '-02-' in f:
+                count_02 += 1
+            if '-03-' in f:
+                count_03 += 1
+    print(count_01, count_02, count_03)
+    pass
+
+
+def main():
+    check('C:\Users\zou\Github\hls_downloader\channelgroup5\channelgroup5\cg543production\ch332')
+
+if __name__ == '__main__':
+    main()
